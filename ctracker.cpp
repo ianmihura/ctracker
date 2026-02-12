@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <mutex>
 
+// TODO enable/disable macros
+
 struct AllocationRecord
 {
     void *ptr;
@@ -19,50 +21,98 @@ protected:
     mutable std::mutex mutex_;
 
 public:
-    static constexpr size_t MAX_RECORDS = 10000; // TODO do we need this?
-    AllocationRecord Records[MAX_RECORDS];       // TODO use a link list
     AllocationRecord *RecordsHead;
     AllocationRecord *RecordsTail;
     size_t RecordCount = 0;
 
+    ~CTrackerMetrics()
+    {
+        AllocationRecord *current = RecordsHead;
+        while (current)
+        {
+            AllocationRecord *next = current->next;
+            std::free(current);
+            current = next;
+        }
+    }
+
     CTrackerMetrics(const CTrackerMetrics &) = delete; // not clonable
-    void operator=(const CTrackerMetrics &) = delete; // not assignable
+    void operator=(const CTrackerMetrics &) = delete;  // not assignable
 
     static CTrackerMetrics *GetTracker();
 
     void CmallocTrack(void *ptr, size_t size)
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (RecordCount < CTrackerMetrics::MAX_RECORDS)
+
+        // We use malloc here to avoid calling our own `operator new`
+        AllocationRecord *newRecord = static_cast<AllocationRecord *>(std::malloc(sizeof(AllocationRecord)));
+        if (!newRecord)
         {
-            // insertion sort by address
-            uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
-            size_t i = RecordCount;
-            while (i > 0 && reinterpret_cast<uintptr_t>(Records[i - 1].ptr) > addr)
+            return;
+        }
+
+        newRecord->ptr = ptr;
+        newRecord->size = size;
+        newRecord->next = nullptr;
+
+        // Maintain sorted order by address for easier fragmentation analysis
+        uintptr_t addr = reinterpret_cast<uintptr_t>(ptr);
+
+        if (!RecordsHead || reinterpret_cast<uintptr_t>(RecordsHead->ptr) > addr)
+        {
+            newRecord->next = RecordsHead;
+            RecordsHead = newRecord;
+            if (!RecordsTail)
             {
-                Records[i] = Records[i - 1];
-                i--;
+                RecordsTail = newRecord;
             }
-            Records[i] = {ptr, size};
-            RecordCount++;
+        }
+        else
+        {
+            AllocationRecord *current = RecordsHead;
+            while (current->next && reinterpret_cast<uintptr_t>(current->next->ptr) < addr)
+            {
+                current = current->next;
+            }
+            newRecord->next = current->next;
+            current->next = newRecord;
+            if (!newRecord->next)
+            {
+                RecordsTail = newRecord;
+            }
         }
     }
 
     void CfreeTrack(void *ptr)
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        for (size_t i = 0; i < RecordCount; ++i)
+        AllocationRecord *current = RecordsHead;
+        AllocationRecord *prev = nullptr;
+
+        while (current)
         {
-            if (Records[i].ptr == ptr)
+            if (current->ptr == ptr)
             {
-                // found
-                for (size_t j = i; j < RecordCount - 1; ++j)
+                if (prev)
                 {
-                    Records[j] = Records[j + 1];
+                    prev->next = current->next;
                 }
-                RecordCount--;
-                break;
+                else
+                {
+                    RecordsHead = current->next;
+                }
+
+                if (current == RecordsTail)
+                {
+                    RecordsTail = prev;
+                }
+
+                std::free(current); // Free the record node
+                return;
             }
+            prev = current;
+            current = current->next;
         }
     }
 
@@ -71,9 +121,11 @@ public:
     {
         std::lock_guard<std::mutex> lock(mutex_);
         size_t active_bytes = 0;
-        for (size_t i = 0; i < RecordCount; ++i)
+        AllocationRecord *current = RecordsHead;
+        while (current)
         {
-            active_bytes += Records[i].size;
+            active_bytes += current->size;
+            current = current->next;
         }
         return active_bytes;
     }
@@ -85,13 +137,13 @@ public:
     float FragmentationIndex()
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (RecordCount < 2)
-        {
+        if (!RecordsHead || (RecordsHead == RecordsTail))
+        { // record count < 2
             return 0.0f;
         }
 
-        uintptr_t start = reinterpret_cast<uintptr_t>(Records[0].ptr);
-        uintptr_t end = reinterpret_cast<uintptr_t>(Records[RecordCount - 1].ptr) + Records[RecordCount - 1].size;
+        uintptr_t start = reinterpret_cast<uintptr_t>(RecordsHead->ptr);
+        uintptr_t end = reinterpret_cast<uintptr_t>(RecordsTail->ptr) + RecordsTail->size;
 
         size_t span = end - start;
         if (span == 0)
@@ -100,9 +152,11 @@ public:
         }
 
         size_t active_bytes = 0;
-        for (size_t i = 0; i < RecordCount; ++i)
+        AllocationRecord *current = RecordsHead;
+        while (current)
         {
-            active_bytes += Records[i].size;
+            active_bytes += current->size;
+            current = current->next;
         }
         float index = 1.0f - (static_cast<float>(active_bytes) / span);
         return index;
@@ -113,16 +167,26 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         size_t largest_gap = 0;
 
-        for (size_t i = 0; i < RecordCount - 1; ++i)
+        if (!RecordsHead)
         {
-            uintptr_t current_end = reinterpret_cast<uintptr_t>(Records[i].ptr) + Records[i].size;
-            uintptr_t next_start = reinterpret_cast<uintptr_t>(Records[i + 1].ptr);
+            return 0;
+        }
 
-            size_t gap = next_start - current_end;
-            if (gap > largest_gap)
+        AllocationRecord *current = RecordsHead;
+        while (current && current->next)
+        {
+            uintptr_t current_end = reinterpret_cast<uintptr_t>(current->ptr) + current->size;
+            uintptr_t next_start = reinterpret_cast<uintptr_t>(current->next->ptr);
+
+            if (next_start > current_end)
             {
-                largest_gap = gap;
+                size_t gap = next_start - current_end;
+                if (gap > largest_gap)
+                {
+                    largest_gap = gap;
+                }
             }
+            current = current->next;
         }
         return largest_gap;
     }
@@ -269,7 +333,7 @@ int main()
     std::printf("tet[29]: %f\n", tet[29]);
 
     // Use a and e to avoid unused warnings
-    std::printf("a: %p, e: %p\n", (void*)a, (void*)e);
+    std::printf("a: %p, e: %p\n", (void *)a, (void *)e);
 
     std::printf("Fragmentation index: %f\n", CTrackerMetrics::GetTracker()->FragmentationIndex());
 
