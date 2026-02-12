@@ -1,9 +1,18 @@
+#ifndef C_TRACKER_HPP
+#define C_TRACKER_HPP
+
+#ifndef C_TRACKER
+#define C_TRACKER 0
+#endif
+
+#if C_TRACKER
+
 #include <iostream>
 #include <atomic>
 #include <cstdlib>
 #include <mutex>
 
-// TODO enable/disable macros
+// TODO tests
 
 struct AllocationRecord
 {
@@ -354,3 +363,6 @@ int main()
 
     return 0;
 }
+
+#endif
+#endif
