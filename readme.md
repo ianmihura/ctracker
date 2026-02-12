@@ -21,6 +21,7 @@ Integrate the tracker into your build. It automatically intercepts all standard 
 #include <ctracker.hpp>
 
 #define C_TRACKER 1 // Enable the tracker: overrides `new` and `delete`
+#define C_TRACKER_VERBOSE 1 // Verbose logs every time `new` & `delete` are called
 
 // Access/Initialize the singleton tracker
 auto tracker = CTrackerMetrics::GetTracker();

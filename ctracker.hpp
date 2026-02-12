@@ -4,6 +4,9 @@
 #ifndef C_TRACKER
 #define C_TRACKER 1
 #endif
+#ifndef C_TRACKER_VERBOSE
+#define C_TRACKER_VERBOSE 0
+#endif
 
 #if C_TRACKER
 
@@ -216,7 +219,9 @@ void *operator new(size_t size)
     if (!lock_tracker)
     {
         lock_tracker = true;
+        #if C_TRACKER_VERBOSE
         printf("`new` called with size %zu -> %p\n", size, ptr);
+        #endif
         CTrackerMetrics::GetTracker()->CmallocTrack(ptr, size);
         lock_tracker = false;
     }
@@ -231,7 +236,9 @@ void *operator new[](size_t size)
     if (!lock_tracker)
     {
         lock_tracker = true;
+        #if C_TRACKER_VERBOSE
         printf("`new[]` called with size %zu -> %p\n", size, ptr);
+        #endif
         CTrackerMetrics::GetTracker()->CmallocTrack(ptr, size);
         lock_tracker = false;
     }
@@ -249,7 +256,9 @@ void operator delete(void *ptr) noexcept
     if (!lock_tracker)
     {
         lock_tracker = true;
+        #if C_TRACKER_VERBOSE
         printf("`delete` called for %p\n", ptr);
+        #endif
         CTrackerMetrics::GetTracker()->CfreeTrack(ptr);
         lock_tracker = false;
     }
@@ -267,7 +276,9 @@ void operator delete[](void *ptr) noexcept
     if (!lock_tracker)
     {
         lock_tracker = true;
+        #if C_TRACKER_VERBOSE
         printf("`delete[]` called for %p\n", ptr);
+        #endif
         CTrackerMetrics::GetTracker()->CfreeTrack(ptr);
         lock_tracker = false;
     }
@@ -285,7 +296,9 @@ void operator delete(void *ptr, size_t size) noexcept
     if (!lock_tracker)
     {
         lock_tracker = true;
+        #if C_TRACKER_VERBOSE
         printf("`delete` called with size %zu for %p\n", size, ptr);
+        #endif
         CTrackerMetrics::GetTracker()->CfreeTrack(ptr);
         lock_tracker = false;
     }
@@ -303,7 +316,9 @@ void operator delete[](void *ptr, size_t size) noexcept
     if (!lock_tracker)
     {
         lock_tracker = true;
+        #if C_TRACKER_VERBOSE
         printf("`delete[]` called with size %zu for %p\n", size, ptr);
+        #endif
         CTrackerMetrics::GetTracker()->CfreeTrack(ptr);
         lock_tracker = false;
     }
