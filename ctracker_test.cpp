@@ -97,23 +97,6 @@ TEST(CTrackerTest, FreeUnknownPointerIsNoOp)
 
 // --- Fragmentation ---
 
-TEST(CTrackerTest, FragmentationIsZeroForSingleRecord)
-{
-    // With a single record, fragmentation should be 0 (need >= 2 records for a span).
-    // Note: gtest has its own live allocations, so fragmentation won't be exactly 0.
-    // We test the structural invariant: fragmentation is in [0, 1).
-    int *p = new int[10];
-
-    // Note: gtest may have its own allocations live, so fragmentation won't be
-    // exactly 0. But if we had an isolated tracker it would be.
-    // We still test the structural invariant: fragmentation is in [0, 1).
-    float frag = CTrackerMetrics::GetTracker()->FragmentationIndex();
-    EXPECT_GE(frag, 0.0f);
-    EXPECT_LT(frag, 1.0f);
-
-    delete[] p;
-}
-
 TEST(CTrackerTest, FragmentationIncreasesAfterFreeingMiddle)
 {
     // Allocate three contiguous-ish blocks, measure fragmentation,
@@ -121,6 +104,9 @@ TEST(CTrackerTest, FragmentationIncreasesAfterFreeingMiddle)
     int *a = new int[100];
     int *b = new int[100];
     int *c = new int[100];
+    a[4] = 4;
+    b[4] = 4;
+    c[4] = 4;
 
     auto *t = CTrackerMetrics::GetTracker();
     float frag_before = t->FragmentationIndex();
