@@ -2,7 +2,7 @@
 #define C_TRACKER_HPP
 
 #ifndef C_TRACKER
-#define C_TRACKER 0
+#define C_TRACKER 1
 #endif
 
 #if C_TRACKER
@@ -11,8 +11,6 @@
 #include <atomic>
 #include <cstdlib>
 #include <mutex>
-
-// TODO tests
 
 struct AllocationRecord
 {
@@ -91,6 +89,7 @@ public:
                 RecordsTail = newRecord;
             }
         }
+        RecordCount++;
     }
 
     void CfreeTrack(void *ptr)
@@ -118,6 +117,7 @@ public:
                 }
 
                 std::free(current); // Free the record node
+                RecordCount--;
                 return;
             }
             prev = current;
@@ -309,59 +309,6 @@ void operator delete[](void *ptr, size_t size) noexcept
     }
 
     std::free(ptr);
-}
-
-int main()
-{
-    float *a = new float[1];
-    float *b = new float[1];
-    int *arr = new int[30];
-    char *cs = new char[30];
-    float *c = new float[1];
-    for (int i = 0; i < 30; i++)
-    {
-        arr[i] = i * 2;
-        cs[i] = i + 4;
-        c[0] = 1;
-    }
-    std::printf("arr[7]: %d\n", arr[7]);
-    std::printf("cs[12]: %d\n", cs[12]);
-    std::printf("cs[19]: %d\n", cs[19]);
-    std::printf("Fragmentation index: %f\n", CTrackerMetrics::GetTracker()->FragmentationIndex());
-    float *tet = new float[30];
-    float *d = new float[50];
-    d[5] = 1;
-    printf("d[5]: %f\n", d[5]);
-    for (int i = 0; i < 30; i++)
-    {
-        tet[i] = static_cast<float>(i) / 3;
-    }
-    float *e = new float[1];
-    std::printf("tet[1]: %f\n", tet[1]);
-    std::printf("tet[19]: %f\n", tet[19]);
-    std::printf("tet[29]: %f\n", tet[29]);
-
-    // Use a and e to avoid unused warnings
-    std::printf("a: %p, e: %p\n", (void *)a, (void *)e);
-
-    std::printf("Fragmentation index: %f\n", CTrackerMetrics::GetTracker()->FragmentationIndex());
-
-    delete[] cs;
-    delete[] b;
-
-    std::printf("Fragmentation index: %f\n", CTrackerMetrics::GetTracker()->FragmentationIndex());
-    std::printf("Largest block: %zu bytes\n", CTrackerMetrics::GetTracker()->FindLargestFreeBlock());
-    std::printf("Total alloc: %zu bytes\n", CTrackerMetrics::GetTracker()->TotalAllocated());
-
-    // Cleanup rest
-    delete[] a;
-    delete[] arr;
-    delete[] c;
-    delete[] tet;
-    delete[] d;
-    delete[] e;
-
-    return 0;
 }
 
 #endif

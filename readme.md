@@ -18,6 +18,10 @@ The library overrides global allocation operators. When `new` is called, it adds
 Integrate the tracker into your build. It automatically intercepts all standard `new` and `delete` calls.
 
 ```cpp
+#include <ctracker.hpp>
+
+#define C_TRACKER 1 // Enable the tracker: overrides `new` and `delete`
+
 // Access/Initialize the singleton tracker
 auto tracker = CTrackerMetrics::GetTracker();
 
