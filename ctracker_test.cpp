@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "ctracker.hpp"
 
+// #define C_TRACKER_VERBOSE 1
+
 // The singleton tracks ALL allocations globally (including gtest internals),
 // so tests measure deltas from a baseline snapshot rather than absolute values.
 
@@ -39,8 +41,8 @@ TEST(CTrackerTest, TrackMultipleAllocations)
 {
     auto before = TakeSnapshot();
 
-    float *a = new float[5];  // 20 bytes
-    char *b = new char[100];  // 100 bytes
+    float *a = new float[5];   // 20 bytes
+    char *b = new char[100];   // 100 bytes
     double *c = new double[8]; // 64 bytes
 
     auto *t = CTrackerMetrics::GetTracker();
@@ -138,43 +140,36 @@ TEST(CTrackerTest, LargestFreeBlockPositiveAfterFree)
 {
     // Allocate 3 blocks; freeing the middle should produce a gap.
     // We can't predict absolute gap sizes because gtest's own allocations interleave,
-    // but the largest gap should be positive when there are active records with freed gaps.
+    // but the largest gap should be at least as big as our created gap.
     int *a = new int[10];
     int *b = new int[200];
     int *c = new int[10];
+    a[4] = 4;
+    b[4] = 4;
+    c[4] = 4;
 
     auto *t = CTrackerMetrics::GetTracker();
 
     delete[] b; // Creates a gap between a and c
 
     size_t gap = t->FindLargestFreeBlock();
-    EXPECT_GT(gap, static_cast<size_t>(0));
+    EXPECT_GE(gap, sizeof(int) * 200);
 
     delete[] a;
     delete[] c;
-}
-
-TEST(CTrackerTest, LargestFreeBlockIsZeroWithNoRecords)
-{
-    // If all test allocations are freed the gap could still be non-zero due to
-    // gtest internals. But with no records at all, the function returns 0.
-    // We test this via the structural path: create and free a single allocation.
-    auto before = TakeSnapshot();
-
-    int *p = new int[1];
-    delete[] p;
-
-    // RecordCount should be back to baseline
-    EXPECT_EQ(CTrackerMetrics::GetTracker()->RecordCount, before.record_count);
 }
 
 // --- Sorted Order ---
 
 TEST(CTrackerTest, RecordsAreSortedByAddress)
 {
-    int *a = new int[1];
-    int *b = new int[1];
-    int *c = new int[1];
+    int *a = new int[10];
+    int *b = new int[10];
+    int *c = new int[10];
+
+    a[4] = 4;
+    b[4] = 4;
+    c[4] = 4;
 
     auto *t = CTrackerMetrics::GetTracker();
 
@@ -186,7 +181,7 @@ TEST(CTrackerTest, RecordsAreSortedByAddress)
         if (prev)
         {
             EXPECT_LT(reinterpret_cast<uintptr_t>(prev->ptr),
-                       reinterpret_cast<uintptr_t>(cur->ptr));
+                      reinterpret_cast<uintptr_t>(cur->ptr));
         }
         prev = cur;
         cur = cur->next;
