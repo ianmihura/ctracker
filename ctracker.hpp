@@ -34,6 +34,7 @@ public:
     AllocationRecord *RecordsHead;
     AllocationRecord *RecordsTail;
     size_t RecordCount = 0;
+    size_t ActiveAllocatedBytes = 0;
 
     ~CTrackerMetrics()
     {
@@ -93,6 +94,7 @@ public:
             }
         }
         RecordCount++;
+        ActiveAllocatedBytes += size;
     }
 
     void CfreeTrack(void *ptr)
@@ -119,6 +121,7 @@ public:
                     RecordsTail = prev;
                 }
 
+                ActiveAllocatedBytes -= current->size;
                 std::free(current); // Free the record node
                 RecordCount--;
                 return;
@@ -132,17 +135,11 @@ public:
     size_t TotalAllocated()
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        size_t active_bytes = 0;
-        AllocationRecord *current = RecordsHead;
-        while (current)
-        {
-            active_bytes += current->size;
-            current = current->next;
-        }
-        return active_bytes;
+        return ActiveAllocatedBytes;
     }
 
     // Absolute index betweenn 0-1.
+    // Formula: currently used bytes / memory they span over.
     //    - Below 0.2 is generally ok
     //    - Around 0.5 is generally not ok
     //    - Above 0.8 is extremely not ok
@@ -163,13 +160,7 @@ public:
             return 0.0f;
         }
 
-        size_t active_bytes = 0;
-        AllocationRecord *current = RecordsHead;
-        while (current)
-        {
-            active_bytes += current->size;
-            current = current->next;
-        }
+        size_t active_bytes = ActiveAllocatedBytes;
         float index = 1.0f - (static_cast<float>(active_bytes) / span);
         return index;
     }

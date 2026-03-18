@@ -56,3 +56,11 @@ delete[] data;
 * **OS**: Linux (recommended for best compatibility with `thread_local`)
 * **Language**: C++11 or higher (C++20 recommended)
 * **Compiler**: GCC or Clang with `-pthread` support.
+
+## Testing
+
+To run tests, execute the following command:
+
+```bash
+g++ -o ctracker_test ctracker_test.cpp -lgtest -lgtest_main -pthread
+```
